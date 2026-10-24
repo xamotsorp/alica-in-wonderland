@@ -1,0 +1,15 @@
+# Пишет журнал nginx из Docker в файл для fail2ban.
+# Установка: см. README → «fail2ban». Путь /opt/portfolio-site поменяйте на свой.
+[Unit]
+Description=Portfolio nginx access log for fail2ban
+After=docker.service
+Requires=docker.service
+
+[Service]
+WorkingDirectory=/opt/portfolio-site
+ExecStart=/bin/sh -c 'docker compose logs -f --no-log-prefix --since 1m nginx >> /var/log/portfolio-nginx.log 2>&1'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

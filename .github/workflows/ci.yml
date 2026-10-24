@@ -1,0 +1,41 @@
+name: Проверки
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Тесты и зависимости
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - name: Уязвимости в зависимостях
+        run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    name: Сборка образов
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Проверка docker-compose и сборка
+        run: |
+          cp .env.example .env
+          sed -i 's/^ADMIN_PATH=.*/ADMIN_PATH=ci-check-admin-path/; s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-only-password/' .env
+          docker compose config --quiet
+          docker compose build
+      - name: Синтаксис shell-скриптов
+        run: bash -n scripts/*.sh nginx/15-select-mode.sh

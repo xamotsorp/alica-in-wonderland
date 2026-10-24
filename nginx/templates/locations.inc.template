@@ -1,0 +1,115 @@
+# Общие правила сайта (подключаются в server для HTTP и HTTPS).
+# ${ADMIN_PATH} подставляется при старте контейнера.
+
+include /etc/nginx/snippets/security-headers.conf;
+limit_conn perip 30;
+
+if ($bad_bot) {
+    return 444;
+}
+if ($request_method !~ ^(GET|HEAD|POST|PUT|PATCH|DELETE)$) {
+    return 405;
+}
+
+# Проверка домена для Let's Encrypt
+location ^~ /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+    default_type text/plain;
+    try_files $uri =404;
+}
+
+# Типичные пути сканеров: обрываем соединение без ответа
+location ~* (\.(php\d?|phtml|asp|aspx|jsp|cgi|pl|env|ini|log|sql|sqlite|bak|old|orig|swp|tar|gz|zip|rar|7z|sh|yml|yaml|toml|conf|config|htaccess|htpasswd)$|/(wp-|wordpress|phpmyadmin|pma|myadmin|xmlrpc|cgi-bin|vendor/|actuator|solr|boaform|hnap1|server-status|console|telescope|_ignition|autodiscover)) {
+    return 444;
+}
+location ~ /\. {
+    return 444;
+}
+
+# Главная страница (рендер на сервере)
+location = / {
+    limit_req zone=general burst=40 nodelay;
+    include /etc/nginx/snippets/proxy.conf;
+}
+
+location = /robots.txt {
+    root /usr/share/nginx/html;
+    access_log off;
+}
+
+location = /favicon.ico {
+    return 301 /static/img/favicon.svg;
+}
+
+# Шрифты не меняются — кэшируем надолго
+location ^~ /static/fonts/ {
+    root /usr/share/nginx/html;
+    limit_req zone=general burst=80 nodelay;
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    access_log off;
+    try_files $uri =404;
+}
+
+# CSS, JS, иконки: браузер каждый раз сверяется с сервером (ответ 304, если не менялось),
+# поэтому после обновления дизайна все сразу видят новую версию
+location ^~ /static/ {
+    root /usr/share/nginx/html;
+    limit_req zone=general burst=80 nodelay;
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-cache" always;
+    etag on;
+    access_log off;
+    try_files $uri =404;
+}
+
+# Загруженные фото: отдаются только файлы вида <uuid>.webp, никаких других имён и типов
+location ~ "^/media/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(-thumb)?\.webp$" {
+    root /srv;
+    limit_req zone=general burst=80 nodelay;
+    types { }
+    default_type image/webp;
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "public, max-age=2592000, immutable" always;
+    access_log off;
+    try_files $uri =404;
+}
+location /media/ {
+    return 404;
+}
+
+# API админки
+location = /api/admin/login {
+    limit_req zone=login burst=5 nodelay;
+    include /etc/nginx/snippets/proxy.conf;
+}
+location = /api/admin/media {
+    limit_req zone=upload burst=20 nodelay;
+    client_max_body_size 16m;
+    client_body_timeout 60s;
+    include /etc/nginx/snippets/proxy.conf;
+}
+location ^~ /api/admin/ {
+    limit_req zone=api burst=30 nodelay;
+    include /etc/nginx/snippets/proxy.conf;
+}
+location /api/ {
+    return 404;
+}
+
+# Админка по секретному адресу (/admin отдаёт 404)
+location = /${ADMIN_PATH} {
+    return 301 /${ADMIN_PATH}/;
+}
+location ^~ /${ADMIN_PATH}/ {
+    alias /usr/share/nginx/html/admin/;
+    index index.html;
+    limit_req zone=general burst=40 nodelay;
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-store" always;
+    add_header X-Robots-Tag "noindex, nofollow" always;
+}
+
+location / {
+    return 404;
+}

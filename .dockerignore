@@ -1,0 +1,6 @@
+.env
+**/node_modules
+certbot
+.git
+*.log
+backend/test

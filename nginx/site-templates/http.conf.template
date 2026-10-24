@@ -1,0 +1,14 @@
+# Режим HTTP: первый запуск (до получения сертификата) и локальная проверка.
+
+# Запросы на IP-адрес или чужой домен — без ответа (так ведут себя сканеры)
+server {
+    listen 8080 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
+    listen 8080;
+    server_name ${DOMAIN};
+    include /etc/nginx/conf.d/locations.inc;
+}

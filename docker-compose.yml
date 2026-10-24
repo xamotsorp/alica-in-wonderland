@@ -1,0 +1,115 @@
+name: alisa-portfolio
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  db:
+    <<: *hardening
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-portfolio}
+      POSTGRES_USER: ${POSTGRES_USER:-portfolio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Задайте POSTGRES_PASSWORD в .env}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    pids_limit: 200
+
+  # Однократно выставляет владельца тома с фото (пользователь node, uid 1000) и завершается
+  uploads-init:
+    image: alpine:3.20
+    command: ["sh", "-c", "chown 1000:1000 /data/uploads && chmod 755 /data/uploads"]
+    volumes:
+      - uploads:/data/uploads
+    network_mode: none
+    restart: "no"
+
+  api:
+    <<: *hardening
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+      uploads-init:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-portfolio}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-portfolio}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Задайте PUBLIC_ORIGIN в .env}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      ADMIN_IP_ALLOWLIST: ${ADMIN_IP_ALLOWLIST:-}
+      MAX_UPLOAD_MB: "15"
+    volumes:
+      - uploads:/data/uploads
+    networks:
+      - backend
+      - frontend
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop:
+      - ALL
+    mem_limit: 768m
+    pids_limit: 200
+
+  nginx:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:?Задайте DOMAIN в .env}
+      ADMIN_PATH: ${ADMIN_PATH:?Задайте ADMIN_PATH в .env}
+    ports:
+      - "${HTTP_PORT:-80}:8080"
+      - "${HTTPS_PORT:-443}:8443"
+    volumes:
+      - uploads:/srv/media:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    networks:
+      - frontend
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    pids_limit: 200
+
+  # Выпуск и продление HTTPS-сертификата. Запускается только с профилем tls.
+  certbot:
+    image: certbot/certbot:v3.0.1
+    profiles: ["tls"]
+    restart: unless-stopped
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
+    networks:
+      - frontend
+
+networks:
+  # База данных доступна только приложению и не имеет выхода в интернет
+  backend:
+    internal: true
+  frontend: {}
+
+volumes:
+  db-data:
+  uploads:

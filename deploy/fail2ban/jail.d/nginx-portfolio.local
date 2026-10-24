@@ -1,0 +1,12 @@
+# Бан IP на сутки после 10 подозрительных запросов за 10 минут.
+# Логи nginx пишутся в файл сервисом deploy/systemd/portfolio-nginx-log.service (см. README).
+[nginx-portfolio]
+enabled  = true
+backend  = auto
+filter   = nginx-portfolio
+logpath  = /var/log/portfolio-nginx.log
+maxretry = 10
+findtime = 10m
+bantime  = 1d
+# Цепочка DOCKER-USER нужна, чтобы бан действовал на порты, открытые Docker
+action   = iptables-allports[name=portfolio, chain=DOCKER-USER]
