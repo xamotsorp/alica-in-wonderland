@@ -14,7 +14,7 @@ RUN npm init -y >/dev/null \
        playfair-display/files/playfair-display-latin-wght-italic.woff2 /out/
 
 # Образ nginx без root: процесс работает от пользователя nginx (101), порты 8080/8443
-FROM nginxinc/nginx-unprivileged:1.28-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 USER root
 RUN rm -f /etc/nginx/conf.d/default.conf \
  && mkdir -p /etc/nginx/templates /etc/nginx/site-templates /etc/nginx/snippets /var/www/certbot /srv/media \
