@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Шрифты берём из npm (fontsource) на этапе сборки — сайт не обращается к внешним CDN.
-FROM node:22-alpine AS fonts
+FROM node:25-alpine AS fonts
 WORKDIR /f
 RUN npm init -y >/dev/null \
  && npm install --no-audit --no-fund @fontsource-variable/inter@5.3.0 @fontsource-variable/playfair-display@5.3.0 \
