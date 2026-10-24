@@ -88,8 +88,9 @@ expect "SQL-инъекция в логине" "401|429" -X POST -H "Origin: $BAS
   -d "{\"username\":\"' OR '1'='1' --\",\"password\":\"x' OR 1=1--\"}" "$BASE/api/admin/login"
 
 section "7. Ограничение частоты запросов"
-seq 1 120 | xargs -P 30 -I{} curl -s -o /dev/null -w '%{http_code}\n' -A "$UA" --max-time 15 "$BASE/" > "$TMP/flood"
-if grep -q 429 "$TMP/flood"; then ok "наплыв запросов режется (429: $(grep -c 429 "$TMP/flood") из 120)"; else bad "нет ограничения частоты"; fi
+# 300 запросов: при удалённом сервере сетевая задержка растягивает поток, 120 может не хватить
+seq 1 300 | xargs -P 30 -I{} curl -s -o /dev/null -w '%{http_code}\n' -A "$UA" --max-time 15 "$BASE/" > "$TMP/flood"
+if grep -q 429 "$TMP/flood"; then ok "наплыв запросов режется (429: $(grep -c 429 "$TMP/flood") из 300)"; else bad "нет ограничения частоты"; fi
 
 if [[ -n "${ADMIN_USER:-}" && -n "${ADMIN_PASS:-}" ]]; then
   section "8. Сессия, CSRF и загрузка файлов (с входом)"

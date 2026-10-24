@@ -10,6 +10,8 @@ server {
     listen 8443 ssl default_server;
     server_name _;
     ssl_reject_handshake on;
+    # Правильный SNI, но чужой заголовок Host — обрываем соединение
+    return 444;
 }
 
 # HTTP → HTTPS (кроме проверки домена для продления сертификата)
