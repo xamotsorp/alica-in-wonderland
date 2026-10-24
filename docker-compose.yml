@@ -100,7 +100,15 @@ services:
     volumes:
       - ./certbot/conf:/etc/letsencrypt
       - ./certbot/www:/var/www/certbot
-    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
+    # certbot создаёт ключи только для root, а nginx работает от пользователя 101:
+    # после выпуска и каждого продления открываем сертификаты группе 101, остальным — нет
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        trap exit TERM;
+        fix() { for d in live archive; do if [ -d /etc/letsencrypt/$$d ]; then chgrp -R 101 /etc/letsencrypt/$$d; chmod -R g+rX,o-rwx /etc/letsencrypt/$$d; fi; done; };
+        while :; do fix; certbot renew --webroot -w /var/www/certbot --quiet; fix; sleep 12h & wait $${!}; done
     networks:
       - frontend
 

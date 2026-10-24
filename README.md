@@ -80,11 +80,11 @@ mkdir -p certbot/conf certbot/www
 docker compose up -d --build
 docker compose run --rm --entrypoint certbot certbot certonly --webroot -w /var/www/certbot \
   -d ваш-домен.ru --email ваша@почта.ru --agree-tos --no-eff-email
-docker compose restart nginx
 docker compose --profile tls up -d certbot
+sleep 15 && docker compose restart nginx
 ```
 
-После перезапуска nginx сам переходит на HTTPS: так происходит, когда для домена есть сертификат. Контейнер certbot продлевает сертификат автоматически.
+Контейнер certbot открывает сертификат для nginx и потом продлевает его автоматически. После перезапуска nginx сам переходит на HTTPS: так происходит, когда для домена есть сертификат. Проверить: `docker compose logs nginx | grep режим` должно показать «режим HTTPS».
 
 **4. Создайте администратора**
 
