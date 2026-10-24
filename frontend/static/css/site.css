@@ -662,7 +662,9 @@ html.no-motion .section-head .kicker::after { transform: none !important; }
   .case-media::before, .case:nth-child(even) .case-media::before { inset: 8% -3% -3% 8%; }
   .contact-figure { max-width: 320px; }
   .hero-grid, .about-grid, .hobbies-grid { grid-template-columns: 1fr; }
-  .hero-figure { max-width: 460px; }
+  .hero-visual, .hero-figure { max-width: 460px; }
+  /* Значок — на нижнем правом углу фото, над подписью (высота подписи ≈ 47px) */
+  .badge { left: auto; right: 14px; bottom: 62px; width: clamp(84px, 20vw, 112px); }
   .about-figure { position: relative; top: auto; max-width: 520px; }
   .hobbies-figure { max-width: 520px; }
   .stats { grid-template-columns: repeat(2, 1fr); }
@@ -687,7 +689,6 @@ html.no-motion .section-head .kicker::after { transform: none !important; }
   .job, .skill-row { grid-template-columns: 1fr; gap: 12px; }
   .hero-actions .btn { flex: 1 1 100%; }
   .site-header { top: 12px; }
-  .badge { left: auto; right: -10px; bottom: -36px; width: 104px; }
   .ghost-num { font-size: 6.5rem; top: -0.1em; }
   .guides { --cw: calc((100vw - 2 * var(--gutter)) / 2); background-position: calc(50% - var(--cw)) 0; }
   .section-bg { width: 100%; opacity: 0.7; }
