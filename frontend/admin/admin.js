@@ -355,7 +355,11 @@
         } else {
           body = renderNode(node.of, item, () => {});
         }
-        return el('div', { class: 'list-item' }, [head, body]);
+        // Скрытая карточка остаётся в списке, но помечена: на сайте её нет
+        const isHidden = () => item && typeof item === 'object' && item.visible === false;
+        const box = el('div', { class: `list-item${isHidden() ? ' is-hidden' : ''}` }, [head, body]);
+        body.addEventListener('change', () => box.classList.toggle('is-hidden', isHidden()));
+        return box;
       });
       const add = el('button', {
         class: 'btn',
@@ -723,8 +727,10 @@
 
     const sidebar = el('aside', { class: 'sidebar' });
     const navButtons = list.map((s, i) => {
+      const off = state.data?.sections && state.data.sections[s.key] === false;
       const b = el('button', {
-        type: 'button', text: s.label, class: s.key === current.key ? 'active' : '',
+        type: 'button', text: off ? `${s.label} · скрыт` : s.label,
+        class: [s.key === current.key ? 'active' : '', off ? 'nav-off' : ''].filter(Boolean).join(' ') || undefined,
         'aria-current': s.key === current.key ? 'page' : false,
         onclick: () => {
           state.section = s.key;
@@ -768,8 +774,23 @@
     if (isContent) {
       const node = current.node;
       const value = state.data[current.key];
+      const sectionOff = state.data.sections && state.data.sections[current.key] === false;
+      if (sectionOff) {
+        content.append(el('div', { class: 'notice' }, [
+          el('span', { text: 'Этот раздел сейчас скрыт на сайте. Всё, что здесь заполнено, сохраняется. ' }),
+          el('button', {
+            class: 'btn btn-small', type: 'button', text: 'Включить раздел',
+            onclick: () => {
+              state.data.sections[current.key] = true;
+              setDirty(true);
+              renderApp();
+            },
+          }),
+        ]));
+      }
       content.append(
         el('div', { class: 'card' }, [
+          node.hint ? el('p', { class: 'hint', text: node.hint }) : null,
           node.type === 'list'
             ? renderList(node, value, false)
             : renderNode(node, value, () => {}),

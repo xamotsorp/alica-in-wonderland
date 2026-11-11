@@ -27,7 +27,9 @@ function asset(p) {
 }
 
 const has = (v) => typeof v === 'string' && v.trim() !== '';
-const nonEmpty = (arr, ...keys) => (arr || []).filter((item) => keys.some((k) => has(item[k])));
+// Карточки, выключенные в админке («Показывать на сайте»), не выводятся
+const shown = (arr) => (arr || []).filter((item) => !item || item.visible !== false);
+const nonEmpty = (arr, ...keys) => shown(arr).filter((item) => keys.some((k) => has(item[k])));
 const pad2 = (n) => String(n).padStart(2, '0');
 
 function img(media, id, { cls = '', sizes = '100vw', alt = '', eager = false } = {}) {
@@ -183,29 +185,33 @@ function renderPage(data, allMedia) {
   const themeClasses = [!t.motion && 'no-motion', !t.grain && 'no-grain', !t.guides && 'no-guides', !t.rails && 'no-rails']
     .filter(Boolean).join(' ');
   const fullName = [h.firstName, h.lastName].filter(has).join(' ') || 'Портфолио';
+  // Разделы, выключенные в админке («Разделы на сайте»): содержимое не трогаем, просто не выводим
+  const on = (key) => !data.sections || data.sections[key] !== false;
+  const when = (key, arr) => (on(key) ? arr : []);
   const contacts = contactLinks(data.contacts);
   const primary = contacts[0];
-  const highlights = nonEmpty(data.highlights, 'value');
-  const paragraphs = (data.about.paragraphs || []).filter(has);
-  const principles = nonEmpty(data.about.principles, 'title');
-  const results = nonEmpty(data.results, 'value', 'title');
-  const charts = (data.charts || [])
+  const highlights = when('highlights', nonEmpty(data.highlights, 'value'));
+  const paragraphs = when('about', (data.about.paragraphs || []).filter(has));
+  const principles = when('about', nonEmpty(data.about.principles, 'title'));
+  const results = when('results', nonEmpty(data.results, 'value', 'title'));
+  const charts = when('charts', shown(data.charts)
     .map((c) => ({ ...c, points: parsePoints(c.points) }))
-    .filter((c) => has(c.title) && c.points.length >= 2);
-  const experience = nonEmpty(data.experience, 'role', 'place');
-  const works = (data.works.items || [])
+    .filter((c) => has(c.title) && c.points.length >= 2));
+  const experience = when('experience', nonEmpty(data.experience, 'role', 'place'));
+  const works = when('works', shown(data.works.items)
     .map((w) => ({ ...w, v: resolveVideo(w, videos) }))
-    .filter((w) => w.v || media.has(w.photo));
-  const skills = nonEmpty(data.skills, 'items');
-  const hobbies = nonEmpty(data.hobbies.items, 'title');
-  const other = nonEmpty(data.otherExperience, 'role', 'place');
-  const education = nonEmpty(data.education, 'title');
+    .filter((w) => w.v || media.has(w.photo)));
+  const skills = when('skills', nonEmpty(data.skills, 'items'));
+  const hobbies = when('hobbies', nonEmpty(data.hobbies.items, 'title'));
+  const other = when('otherExperience', nonEmpty(data.otherExperience, 'role', 'place'));
+  const education = when('education', nonEmpty(data.education, 'title'));
+  const showContacts = on('contacts');
   const heroPhoto = h.photo && media.has(h.photo);
   const aboutPhoto = data.about.photo && media.has(data.about.photo);
   const hobbyPhoto = data.hobbies.photo && media.has(data.hobbies.photo);
   const contactPhoto = data.contacts.photo && media.has(data.contacts.photo);
-  const projects = (data.projects.items || []).filter((p) => has(p.title));
-  const certificates = (data.certificates.items || []).filter((c) => has(c.title));
+  const projects = when('projects', shown(data.projects.items).filter((p) => has(p.title)));
+  const certificates = when('certificates', shown(data.certificates.items).filter((c) => has(c.title)));
   // Фоновые фото (мероприятия, съёмки): чёрно-белые и полупрозрачные, по кругу для разных разделов
   const decorPhotos = (data.decor.photos || []).filter((id) => media.has(id));
   const bgPhoto = (i, variant) => {
@@ -232,7 +238,7 @@ function renderPage(data, allMedia) {
     certificates.length && { id: 'certificates', label: data.certificates.heading || 'Сертификаты' },
     hobbies.length && { id: 'hobbies', label: data.hobbies.heading || 'Увлечения' },
     (other.length || education.length) && { id: 'more', label: other.length ? 'Другой опыт' : 'Образование' },
-    { id: 'contacts', label: 'Контакты' },
+    showContacts && { id: 'contacts', label: 'Контакты' },
   ].filter(Boolean);
   const num = Object.fromEntries(sections.map((s, i) => [s.id, pad2(i + 1)]));
 
@@ -310,7 +316,7 @@ ${ogImage ? `<meta property="og:image" content="${esc(ogImage)}">` : ''}
       ${has(h.tagline) ? `<p class="hero-tagline reveal">${multiline(h.tagline)}</p>` : ''}
       <div class="hero-actions reveal">
         ${primary ? `<a class="btn btn-dark" ${linkAttrs(primary)}>Написать мне ${icon('arrow')}</a>` : ''}
-        <a class="btn btn-line" href="#${sections[0].id}">Смотреть портфолио</a>
+        ${sections.length ? `<a class="btn btn-line" href="#${sections[0].id}">Смотреть портфолио</a>` : ''}
       </div>
       <ul class="hero-meta reveal">
         ${has(h.status) ? `<li><span class="dot" aria-hidden="true"></span>${esc(h.status)}</li>` : ''}
@@ -352,7 +358,7 @@ ${projects.length ? `<section class="section projects" id="projects" aria-labell
         const photos = [p.photo1, p.photo2].filter((id) => id && media.has(id));
         const done = (p.done || []).filter(has);
         const metrics = nonEmpty(p.metrics, 'value');
-        const clips = (p.videos || []).map((c) => ({ ...c, v: resolveVideo(c, videos) })).filter((c) => c.v);
+        const clips = shown(p.videos).map((c) => ({ ...c, v: resolveVideo(c, videos) })).filter((c) => c.v);
         return `<li class="case${photos.length ? '' : ' case-no-photo'}">
         ${photos.length ? `<div class="case-media${photos.length > 1 ? ' case-media-two' : ''}">
           ${photos.map((id, k) => `<a class="case-photo case-photo-${k + 1} img-reveal" href="${esc(media.get(id).url)}" data-lightbox data-caption="${esc(p.title)}">
@@ -524,7 +530,7 @@ ${other.length || education.length ? `<section class="section more" id="more" ar
   </div>
 </section>` : ''}
 
-<section class="section contact" id="contacts" aria-labelledby="contacts-title">
+${showContacts ? `<section class="section contact" id="contacts" aria-labelledby="contacts-title">
   <div class="container">
     <div class="contact-card reveal${contactPhoto ? ' contact-card-photo' : ''}">
       ${contactPhoto ? '' : bgPhoto(2, 'contact')}
@@ -539,7 +545,7 @@ ${other.length || education.length ? `<section class="section more" id="more" ar
       ${contactPhoto ? `<figure class="contact-figure img-reveal">${img(media, data.contacts.photo, { cls: 'contact-photo', sizes: '(max-width: 900px) 80vw, 380px', alt: fullName })}</figure>` : ''}
     </div>
   </div>
-</section>
+</section>` : ''}
 </main>
 
 <footer class="site-footer">

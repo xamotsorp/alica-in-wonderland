@@ -263,3 +263,60 @@ test('рендер: свой ролик и ролик по ссылке в «Р�
   assert.ok(html.includes('Репортаж'));
   assert.ok(!html.includes('<iframe'), 'чужой плеер не встраивается до нажатия');
 });
+
+// ---------- Видимость разделов и карточек ----------
+
+test('видимость: данные, сохранённые до переключателей, выводятся как раньше', () => {
+  const { fillMissing } = require('../src/content');
+  // Так выглядят данные на сервере до обновления: нет sections и visible, часть карточек удалена, поле очищено
+  const old = structuredClone(defaults);
+  delete old.sections;
+  old.projects.items = old.projects.items.slice(0, 2);
+  old.results = old.results.slice(1);
+  old.hero.tagline = '';
+  const strip = (v) => {
+    if (Array.isArray(v)) v.forEach(strip);
+    else if (v && typeof v === 'object') { delete v.visible; Object.values(v).forEach(strip); }
+  };
+  strip(old);
+  const data = validateContent(fillMissing(defaults, JSON.parse(JSON.stringify(old))));
+  // Правки сохранились: удалённое не вернулось, очищенное не заполнилось
+  assert.equal(data.projects.items.length, 2);
+  assert.equal(data.results.length, defaults.results.length - 1);
+  assert.equal(data.hero.tagline, '');
+  // Всё включено по умолчанию
+  assert.ok(Object.values(data.sections).every((v) => v === true));
+  assert.ok(data.projects.items.every((p) => p.visible === true));
+  const html = renderPage(data, new Map());
+  for (const id of ['about', 'projects', 'results', 'growth', 'experience', 'skills', 'certificates', 'hobbies', 'contacts']) {
+    assert.ok(html.includes(`href="#${id}"`), `раздел ${id} в меню`);
+  }
+});
+
+test('видимость: выключенный раздел и скрытая карточка не выводятся, но остаются в данных', () => {
+  const projects = structuredClone(defaults.projects);
+  projects.items[1].visible = false;
+  const data = validateContent({
+    ...defaults,
+    projects,
+    sections: { certificates: false, contacts: false },
+  });
+  assert.equal(data.sections.certificates, false);
+  assert.equal(data.sections.projects, true);
+  assert.equal(data.projects.items[1].visible, false);
+  assert.equal(data.projects.items.length, defaults.projects.items.length);
+  const html = renderPage(data, new Map());
+  assert.ok(!html.includes('id="certificates"') && !html.includes('href="#certificates"'));
+  assert.ok(!html.includes('id="contacts"') && !html.includes('href="#contacts"'));
+  assert.ok(html.includes(defaults.projects.items[0].title));
+  assert.ok(!html.includes(defaults.projects.items[1].title), 'скрытый проект не выводится');
+  assert.ok(html.includes(defaults.projects.items[2].title.replace(/&/g, '&amp;')));
+});
+
+test('видимость: всё выключено — страница всё равно строится', () => {
+  const sections = Object.fromEntries(Object.keys(validateContent(defaults).sections).map((k) => [k, false]));
+  const html = renderPage(validateContent({ ...defaults, sections }), new Map());
+  assert.ok(html.includes('id="hero-title"'));
+  assert.ok(!html.includes('Смотреть портфолио'));
+  assert.ok(!html.includes('href="#about"'));
+});

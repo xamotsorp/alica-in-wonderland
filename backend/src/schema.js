@@ -27,6 +27,10 @@ const videoFields = {
   ], 'auto'),
 };
 
+// Карточка списка с переключателем видимости: скрытая карточка остаётся в админке, но не выводится.
+// У карточек, сохранённых до появления переключателя, значение по умолчанию — «показывать».
+const item = (label, fields, extra = {}) => obj(label, { visible: toggle('Показывать на сайте', true), ...fields }, extra);
+
 const tasks = list('Пункты', text('Пункт', 300), 8, { itemLabel: 'Пункт' });
 
 const schema = obj('Сайт', {
@@ -40,7 +44,22 @@ const schema = obj('Сайт', {
     location: str('Город', 80),
     photo: image('Фото'),
   }),
-  highlights: list('Цифры на главном экране', obj('Цифра', {
+  sections: obj('Разделы на сайте', {
+    highlights: toggle('Цифры на главном экране', true),
+    about: toggle('Обо мне', true),
+    projects: toggle('Проекты и мероприятия', true),
+    results: toggle('Результаты', true),
+    charts: toggle('Графики роста', true),
+    experience: toggle('Опыт в SMM', true),
+    works: toggle('Работы: ролики и примеры контента', true),
+    skills: toggle('Навыки', true),
+    certificates: toggle('Сертификаты', true),
+    hobbies: toggle('Увлечения', true),
+    otherExperience: toggle('Другой опыт работы', true),
+    education: toggle('Образование и курсы', true),
+    contacts: toggle('Контакты', true),
+  }, { hint: 'Выключенный раздел пропадает с сайта и из меню, но всё его содержимое остаётся в админке — его можно включить обратно в любой момент.' }),
+  highlights: list('Цифры на главном экране', item('Цифра', {
     value: str('Значение', 14),
     label: str('Подпись', 60),
   }), 4, { itemLabel: 'Цифра' }),
@@ -48,7 +67,7 @@ const schema = obj('Сайт', {
     heading: str('Заголовок', 140),
     paragraphs: list('Абзацы', text('Абзац', 700), 6, { itemLabel: 'Абзац' }),
     photo: image('Фото рядом с текстом'),
-    principles: list('Принципы работы', obj('Принцип', {
+    principles: list('Принципы работы', item('Принцип', {
       title: str('Заголовок', 60),
       text: text('Пояснение', 220),
     }), 4, { itemLabel: 'Принцип' }),
@@ -56,7 +75,7 @@ const schema = obj('Сайт', {
   projects: obj('Проекты (мероприятия)', {
     heading: str('Заголовок раздела', 80),
     intro: text('Вступление', 300),
-    items: list('Проекты', obj('Проект', {
+    items: list('Проекты', item('Проект', {
       title: str('Название мероприятия', 90),
       category: str('Тип (конференция, фестиваль, форум…)', 40),
       period: str('Когда', 40),
@@ -69,24 +88,24 @@ const schema = obj('Сайт', {
         value: str('Значение', 16),
         label: str('Подпись', 60),
       }), 4, { itemLabel: 'Цифра' }),
-      videos: list('Ролики с мероприятия', obj('Ролик', {
+      videos: list('Ролики с мероприятия', item('Ролик', {
         ...videoFields,
         title: str('Подпись под роликом', 80),
       }), 4, { itemLabel: 'Ролик' }),
     }), 12, { itemLabel: 'Проект' }),
   }),
-  results: list('Ключевые результаты', obj('Результат', {
+  results: list('Ключевые результаты', item('Результат', {
     value: str('Крупная цифра', 16),
     title: str('Заголовок', 60),
     text: text('Пояснение', 220),
   }), 8, { itemLabel: 'Результат' }),
-  charts: list('Графики роста', obj('График', {
+  charts: list('Графики роста', item('График', {
     title: str('Заголовок', 80),
     caption: str('Подпись (проект, период)', 120),
     unit: str('Единица (например, % или подписчиков)', 20),
     points: text('Точки: «подпись: число», каждая с новой строки (например «1-й месяц: 20000»). Только реальные цифры из статистики', 400),
   }), 4, { itemLabel: 'График' }),
-  experience: list('Опыт в SMM', obj('Место работы', {
+  experience: list('Опыт в SMM', item('Место работы', {
     role: str('Должность', 120),
     place: str('Где / с кем', 120),
     period: str('Период', 80),
@@ -97,7 +116,7 @@ const schema = obj('Сайт', {
   works: obj('Работы: ролики и примеры контента', {
     heading: str('Заголовок', 80),
     intro: text('Вступление', 300),
-    items: list('Карточки', obj('Работа', {
+    items: list('Карточки', item('Работа', {
       photo: image('Фото или обложка ролика'),
       ...videoFields,
       title: str('Название', 80),
@@ -105,14 +124,14 @@ const schema = obj('Сайт', {
       tag: str('Метка (ниша)', 40),
     }), 40, { itemLabel: 'Работа' }),
   }),
-  skills: list('Навыки', obj('Группа навыков', {
+  skills: list('Навыки', item('Группа навыков', {
     group: str('Группа', 40),
     items: text('Навыки через запятую', 400),
   }), 10, { itemLabel: 'Группа' }),
   certificates: obj('Сертификаты', {
     heading: str('Заголовок раздела', 80),
     intro: text('Вступление', 300),
-    items: list('Сертификаты', obj('Сертификат', {
+    items: list('Сертификаты', item('Сертификат', {
       title: str('Название курса', 100),
       school: str('Школа или платформа', 80),
       period: str('Даты обучения или дата выдачи', 60),
@@ -126,18 +145,18 @@ const schema = obj('Сайт', {
     heading: str('Заголовок', 80),
     intro: text('Вступление', 300),
     photo: image('Фото'),
-    items: list('Увлечения', obj('Увлечение', {
+    items: list('Увлечения', item('Увлечение', {
       title: str('Название', 60),
       text: text('Пара предложений', 260),
     }), 6, { itemLabel: 'Увлечение' }),
   }),
-  otherExperience: list('Другой опыт работы', obj('Место работы', {
+  otherExperience: list('Другой опыт работы', item('Место работы', {
     role: str('Должность', 120),
     place: str('Организация', 120),
     period: str('Период', 80),
     tasks,
   }), 6, { itemLabel: 'Место работы' }),
-  education: list('Образование и курсы', obj('Запись', {
+  education: list('Образование и курсы', item('Запись', {
     title: str('Название', 200),
     details: str('Подробности', 200),
   }), 6, { itemLabel: 'Запись' }),
