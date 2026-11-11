@@ -7,6 +7,7 @@ const db = require('./db');
 const auth = require('./auth');
 const content = require('./content');
 const media = require('./media');
+const { importSeedVideos } = require('./seedVideos');
 const { renderPage } = require('./render');
 
 const app = express();
@@ -97,7 +98,11 @@ async function start() {
   ]).catch((err) => console.error('[cleanup]', err.message));
   cleanup();
   setInterval(cleanup, 3600_000).unref();
-  const server = app.listen(config.port, () => console.log(`[api] слушаю порт ${config.port}`));
+  const server = app.listen(config.port, () => {
+    console.log(`[api] слушаю порт ${config.port}`);
+    // Стартовые ролики — в фоне, чтобы сайт открывался сразу
+    importSeedVideos().catch((err) => console.error('[seed]', err.message));
+  });
   server.headersTimeout = 15_000;
   server.requestTimeout = 60_000;
   const stop = () => server.close(() => db.pool.end().finally(() => process.exit(0)));

@@ -325,3 +325,38 @@ test('видимость: всё выключено — страница всё 
   assert.ok(!html.includes('Смотреть портфолио'));
   assert.ok(!html.includes('href="#about"'));
 });
+
+// ---------- Стартовые ролики ----------
+
+test('стартовые ролики: добавляются к существующему, ничего не меняя', () => {
+  const { applySeedVideo, SEED_VIDEOS } = require('../src/seedVideos');
+  const id = '33333333-3333-4333-8333-333333333333';
+  const before = validateContent({
+    ...defaults,
+    works: { ...defaults.works, heading: 'Свой заголовок', items: [{ title: 'Своя работа', videoUrl: 'youtu.be/dQw4w9WgXcQ' }] },
+  });
+  const data = structuredClone(before);
+  for (const e of SEED_VIDEOS) applySeedVideo(data, e, id);
+  const after = validateContent(data);
+  // Три ролика автосервиса — в конец «Работ», своя карточка и заголовок на месте
+  assert.equal(after.works.heading, 'Свой заголовок');
+  assert.equal(after.works.items[0].title, 'Своя работа');
+  assert.deepEqual(after.works.items.slice(1).map((w) => w.tag), ['Автосервис · детейлинг', 'Автосервис · детейлинг', 'Автосервис · детейлинг']);
+  assert.ok(after.works.items.slice(1).every((w) => w.video === id && w.visible && has(w.caption)));
+  // GISDAYS — в ролики проекта GIS DAYS
+  const gis = after.projects.items.find((p) => /GIS/.test(p.title));
+  assert.equal(gis.videos.length, 1);
+  assert.equal(gis.videos[0].video, id);
+  // Остальное содержимое не изменилось
+  const strip = (d) => ({ ...d, works: undefined, projects: { ...d.projects, items: d.projects.items.map((p) => ({ ...p, videos: undefined })) } });
+  assert.deepEqual(strip(after), strip(before));
+  function has(v) { return typeof v === 'string' && v.trim() !== ''; }
+});
+
+test('стартовые ролики: без проекта GIS DAYS ролик уходит в «Работы»', () => {
+  const { applySeedVideo, SEED_VIDEOS } = require('../src/seedVideos');
+  const data = validateContent({ ...defaults, projects: { ...defaults.projects, items: [] } });
+  const gis = SEED_VIDEOS.find((e) => e.project);
+  assert.equal(applySeedVideo(data, gis, '33333333-3333-4333-8333-333333333333'), 'works');
+  assert.equal(validateContent(data).works.items[0].title, 'GISDAYS 2026: атмосфера форума');
+});

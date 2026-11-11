@@ -246,6 +246,18 @@ async function saveVideo(input, alt = '') {
   }
 }
 
+// Для стартовых роликов: та же обработка и та же очередь, что у загрузки из админки
+function saveVideoQueued(file, alt = '') {
+  return enqueue(() => saveVideo(file, alt));
+}
+
+// Удаляет файл медиатеки вместе с файлами на диске (используется, если импорт не удался)
+async function removeMedia(id) {
+  const { rows } = await db.query('DELETE FROM media WHERE id = $1 RETURNING *', [id]);
+  if (!rows[0]) return;
+  await Promise.all([rows[0].file_name, rows[0].thumb_name].map((f) => fs.unlink(path.join(config.uploadsDir, f)).catch(() => {})));
+}
+
 // Остатки прерванных загрузок видео (например, после перезапуска во время обработки)
 async function cleanIncoming() {
   const dir = incomingDir();
@@ -355,4 +367,4 @@ router.delete('/media/:id', requireAuth, async (req, res, next) => {
   }
 });
 
-module.exports = { router, listMedia, importSeedPhotos, importSeedFile, cleanIncoming };
+module.exports = { router, listMedia, importSeedPhotos, importSeedFile, cleanIncoming, saveVideoQueued, removeMedia };
