@@ -131,11 +131,16 @@ test('рендер: раздел сертификатов и пункт меню
   assert.ok(html.indexOf('id="skills"') < html.indexOf('id="certificates"'));
 });
 
-test('рендер: подпись разработчика в подвале', () => {
-  const html = renderPage(validateContent(defaults), new Map());
+test('подвал: не редактируется — поле отбрасывается, текст всегда из кода', () => {
+  const { schema } = require('../src/schema');
+  assert.equal('footer' in schema.fields, false, 'подвала нет в админке');
+  // Старые данные из базы или подделанный запрос с footer не меняют подвал
+  const data = validateContent({ ...defaults, footer: { copyright: 'Чужой текст', credit: '' } });
+  assert.equal('footer' in data, false);
+  const html = renderPage(data, new Map());
   assert.ok(html.includes('Designed &amp; developed by xamotsorp'));
-  const none = renderPage(validateContent({ ...defaults, footer: { credit: '' } }), new Map());
-  assert.ok(!none.includes('footer-credit'));
+  assert.ok(html.includes('Alica in Wonderland'));
+  assert.ok(!html.includes('Чужой текст'));
 });
 
 test('почта: нельзя подмешать параметры в mailto', () => {

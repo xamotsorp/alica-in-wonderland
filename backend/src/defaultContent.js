@@ -310,10 +310,6 @@ module.exports = {
     photos: [],
     badge: 'SMM · Reels · Контент · Аналитика · Стратегия · ',
   },
-  footer: {
-    copyright: 'Alica in Wonderland',
-    credit: 'Designed & developed by xamotsorp',
-  },
   seo: {
     title: 'Алиса — SMM-специалист и контент-мейкер',
     description:

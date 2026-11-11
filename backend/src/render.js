@@ -6,6 +6,12 @@
 const config = require('./config');
 const { parseVideoLink } = require('./video');
 
+// Подвал не редактируется в админке: текст задан здесь. Старые значения footer в базе игнорируются.
+const FOOTER = Object.freeze({
+  copyright: 'Alica in Wonderland',
+  credit: 'Designed & developed by xamotsorp',
+});
+
 const ASSET_VERSION = process.env.ASSET_VERSION || String(Date.now());
 
 function esc(value) {
@@ -550,8 +556,8 @@ ${showContacts ? `<section class="section contact" id="contacts" aria-labelledby
 
 <footer class="site-footer">
   <div class="container footer-inner">
-    <span${has(data.footer.copyright) ? ' lang="en"' : ''}>© ${new Date().getFullYear()} ${esc(data.footer.copyright || fullName)}</span>
-    ${has(data.footer.credit) ? `<span class="footer-credit" lang="en">${esc(data.footer.credit)}</span>` : ''}
+    <span lang="en">© ${new Date().getFullYear()} ${esc(FOOTER.copyright)}</span>
+    <span class="footer-credit" lang="en">${esc(FOOTER.credit)}</span>
     <a href="#top">Наверх ↑</a>
   </div>
 </footer>
