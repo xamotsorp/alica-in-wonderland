@@ -2,6 +2,7 @@
 
 // Стартовые ролики из seed/videos. При запуске сервера каждый ролик импортируется ровно один раз:
 // файл загружается в медиатеку, а в содержимое ДОБАВЛЯЕТСЯ карточка (в «Работы» или в ролики проекта).
+// Карточки приходят СКРЫТЫМИ: Алиса смотрит их в админке и сама включает «Показывать на сайте».
 // Существующие тексты, карточки и настройки не меняются. После импорта ключ записывается
 // в seed_imports, поэтому удалённая в админке карточка после перезапуска не вернётся.
 
@@ -67,7 +68,7 @@ const SEED_VIDEOS = [
 
 // Добавляет ролик в содержимое (без побочных эффектов — удобно тестировать). Возвращает, куда добавлен.
 function applySeedVideo(data, entry, mediaId) {
-  const base = { visible: true, video: mediaId, videoUrl: '', shape: 'auto' };
+  const base = { visible: false, video: mediaId, videoUrl: '', shape: 'auto' };
   if (entry.project) {
     const project = (data.projects.items || []).find((p) => entry.project.test(p.title || ''));
     if (project) {

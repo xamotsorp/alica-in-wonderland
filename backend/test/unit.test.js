@@ -342,11 +342,18 @@ test('стартовые ролики: добавляются к существ�
   assert.equal(after.works.heading, 'Свой заголовок');
   assert.equal(after.works.items[0].title, 'Своя работа');
   assert.deepEqual(after.works.items.slice(1).map((w) => w.tag), ['Автосервис · детейлинг', 'Автосервис · детейлинг', 'Автосервис · детейлинг']);
-  assert.ok(after.works.items.slice(1).every((w) => w.video === id && w.visible && has(w.caption)));
+  assert.ok(after.works.items.slice(1).every((w) => w.video === id && w.visible === false && has(w.caption)));
   // GISDAYS — в ролики проекта GIS DAYS
   const gis = after.projects.items.find((p) => /GIS/.test(p.title));
   assert.equal(gis.videos.length, 1);
   assert.equal(gis.videos[0].video, id);
+  assert.equal(gis.videos[0].visible, false);
+  // На сайте новые ролики не видны, пока их не включат; своя работа видна
+  const vid = { id, kind: 'video', url: `/media/${id}.mp4`, thumb: `/media/${id}-thumb.webp`, width: 720, height: 1280, duration: 16, alt: '' };
+  const html = renderPage(after, new Map([[id, vid]]));
+  assert.ok(html.includes('Своя работа'));
+  assert.ok(!html.includes('Детейлинг: «опять на мойку отдал?»'));
+  assert.ok(!html.includes(`/media/${id}.mp4`));
   // Остальное содержимое не изменилось
   const strip = (d) => ({ ...d, works: undefined, projects: { ...d.projects, items: d.projects.items.map((p) => ({ ...p, videos: undefined })) } });
   assert.deepEqual(strip(after), strip(before));
