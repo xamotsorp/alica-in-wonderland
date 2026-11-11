@@ -183,6 +183,32 @@ document.addEventListener('DOMContentLoaded', () => {
     items.forEach((el) => el.classList.add('in'));
   }
 
+  // Ролики VK Видео / YouTube / Rutube: плеер подгружается только по нажатию.
+  // Без JavaScript ссылка просто открывает ролик на сайте площадки.
+  const ALLOWED_PLAYERS = ['https://vkvideo.ru/', 'https://www.youtube-nocookie.com/', 'https://rutube.ru/'];
+  document.querySelectorAll('.vid-facade[data-embed]').forEach((link) => {
+    link.addEventListener('click', (e) => {
+      const src = link.dataset.embed || '';
+      if (!ALLOWED_PLAYERS.some((p) => src.startsWith(p))) return;
+      e.preventDefault();
+      const frame = document.createElement('iframe');
+      frame.className = 'vid-frame';
+      frame.src = src;
+      frame.title = link.dataset.title || 'Видео';
+      frame.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture; clipboard-write';
+      frame.allowFullscreen = true;
+      frame.referrerPolicy = 'strict-origin-when-cross-origin';
+      link.replaceWith(frame);
+      frame.focus();
+    });
+  });
+
+  // Свой ролик: при запуске одного остальные ставятся на паузу
+  const players = document.querySelectorAll('video.vid-player');
+  players.forEach((v) => {
+    v.addEventListener('play', () => players.forEach((o) => { if (o !== v) o.pause(); }));
+  });
+
   // Просмотр фото из раздела «Работы»
   const box = document.querySelector('.lightbox');
   if (box) {

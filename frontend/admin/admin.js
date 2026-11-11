@@ -184,7 +184,7 @@
   // ---------- Значения по умолчанию из схемы ----------
 
   function emptyValue(node) {
-    if (node.type === 'string' || node.type === 'image') return '';
+    if (node.type === 'string' || node.type === 'image' || node.type === 'video') return '';
     if (node.type === 'select' || node.type === 'toggle') return node.default;
     if (node.type === 'list') return [];
     const out = {};
@@ -197,7 +197,13 @@
   function stringField(node, value, onChange) {
     const input = node.multiline
       ? el('textarea', { class: 'input', maxlength: String(node.max), rows: node.max > 300 ? '5' : '3' })
-      : el('input', { class: 'input', maxlength: String(node.max), type: node.format === 'email' ? 'email' : node.format === 'phone' ? 'tel' : 'text' });
+      : el('input', {
+        class: 'input',
+        maxlength: String(node.max),
+        type: node.format === 'email' ? 'email' : node.format === 'phone' ? 'tel' : 'text',
+        placeholder: node.format === 'video' ? 'https://vkvideo.ru/clip-123_456 или https://youtube.com/shorts/…' : undefined,
+        inputmode: node.format === 'video' ? 'url' : undefined,
+      });
     input.value = value || '';
     const counter = el('span', { class: 'counter' });
     const update = () => {
@@ -212,22 +218,41 @@
     return { input, counter };
   }
 
+  const kindOf = (m) => m.kind || 'image';
+
+  function fmtDuration(sec) {
+    const t = Math.round(Number(sec) || 0);
+    return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+  }
+
+  // Превью файла медиатеки: для видео — кадр-обложка с длительностью
+  function mediaThumb(m, cls) {
+    const pic = el('img', { src: m.thumb, alt: m.alt || (kindOf(m) === 'video' ? 'Видео' : 'Фото'), loading: 'lazy' });
+    if (kindOf(m) !== 'video') {
+      if (cls) pic.className = cls;
+      return pic;
+    }
+    return el('div', { class: `thumb-video${cls ? ` ${cls}` : ''}` }, [pic, el('span', { class: 'thumb-badge', text: `▶ ${fmtDuration(m.duration)}` })]);
+  }
+
   function imageField(node, value, onChange) {
+    const kind = node.type === 'video' ? 'video' : 'image';
+    const noun = kind === 'video' ? 'видео' : 'фото';
     const wrap = el('div', { class: 'image-field' });
     const draw = (id) => {
-      const m = state.media.find((x) => x.id === id);
+      const m = state.media.find((x) => x.id === id && kindOf(x) === kind);
       const preview = m
-        ? el('img', { class: 'image-preview', src: m.thumb, alt: m.alt || 'Выбранное фото' })
-        : el('div', { class: 'image-preview', text: id ? 'Фото удалено' : 'Нет фото' });
+        ? mediaThumb(m, 'image-preview')
+        : el('div', { class: 'image-preview', text: id ? `${kind === 'video' ? 'Видео удалено' : 'Фото удалено'}` : `Нет ${noun}` });
       const pick = el('button', {
         class: 'btn',
         type: 'button',
-        text: m ? 'Заменить' : 'Выбрать фото',
+        text: m ? 'Заменить' : `Выбрать ${noun}`,
         onclick: () =>
           openPicker((picked) => {
             onChange(picked);
             draw(picked);
-          }),
+          }, kind),
       });
       const clear = m
         ? el('button', {
@@ -251,7 +276,7 @@
       const { input, counter } = stringField(node, value, onChange);
       return el('label', { class: 'field' }, [el('span', { text: label || node.label }), input, counter]);
     }
-    if (node.type === 'image') {
+    if (node.type === 'image' || node.type === 'video') {
       return el('div', { class: 'field' }, [el('span', { text: label || node.label }), imageField(node, value, onChange)]);
     }
     if (node.type === 'select') {
@@ -359,13 +384,24 @@
     state.media = await api('GET', '/media');
   }
 
-  function dropzone(onUploaded) {
-    const input = el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/avif', multiple: true, hidden: true });
+  const IMAGE_TYPES = 'image/jpeg,image/png,image/webp,image/avif';
+  const VIDEO_TYPES = 'video/mp4,video/quicktime,video/webm,.mp4,.m4v,.mov,.webm';
+  const isVideoFile = (f) => /^video\//.test(f.type) || /\.(mp4|m4v|mov|webm)$/i.test(f.name);
+
+  // kind: 'image', 'video' или 'any' (медиатека принимает и то, и другое)
+  function dropzone(onUploaded, kind = 'image') {
+    const accept = kind === 'video' ? VIDEO_TYPES : kind === 'any' ? `${IMAGE_TYPES},${VIDEO_TYPES}` : IMAGE_TYPES;
+    const what = kind === 'video' ? 'видео' : kind === 'any' ? 'фото или видео' : 'фото';
+    const notes = [];
+    if (kind !== 'video') notes.push('Фото: JPG, PNG, WebP, AVIF · до 15 МБ');
+    if (kind !== 'image') notes.push('Видео: MP4, MOV, WebM · до 200 МБ и 10 минут');
+    notes.push('метаданные (геопозиция, модель телефона) удаляются автоматически');
+    const input = el('input', { type: 'file', accept, multiple: true, hidden: true });
     const progress = el('div', { class: 'progress', hidden: true }, [el('i')]);
     const status = el('span', { class: 'hint' });
-    const zone = el('div', { class: 'dropzone', tabindex: '0', role: 'button', 'aria-label': 'Загрузить фото' }, [
-      el('strong', { text: 'Перетащите фото сюда или нажмите, чтобы выбрать' }),
-      el('span', { text: 'JPG, PNG, WebP, AVIF · до 15 МБ · метаданные (геопозиция, модель телефона) удаляются автоматически' }),
+    const zone = el('div', { class: 'dropzone', tabindex: '0', role: 'button', 'aria-label': `Загрузить ${what}` }, [
+      el('strong', { text: `Перетащите ${what} сюда или нажмите, чтобы выбрать` }),
+      el('span', { text: notes.join(' · ') }),
       progress,
       status,
       input,
@@ -375,15 +411,23 @@
     async function uploadFiles(files) {
       const list = [...files].slice(0, 20);
       for (let i = 0; i < list.length; i += 1) {
+        const asVideo = isVideoFile(list[i]);
+        if ((kind === 'image' && asVideo) || (kind === 'video' && !asVideo)) {
+          toast(`${list[i].name}: здесь нужно ${kind === 'video' ? 'видео' : 'фото'}`, true);
+          continue;
+        }
         const fd = new FormData();
         fd.append('file', list[i]);
         progress.hidden = false;
-        status.textContent = `Загружаю ${i + 1} из ${list.length}: ${list[i].name}`;
+        const label = `${i + 1} из ${list.length}: ${list[i].name}`;
+        status.textContent = `Загружаю ${label}`;
         try {
-          const media = await api('POST', '/media', fd, {
+          const media = await api('POST', asVideo ? '/media/video' : '/media', fd, {
             raw: true,
             onProgress: (p) => {
               bar.style.width = `${Math.round(p * 100)}%`;
+              // Файл передан — дальше сервер проверяет и пересобирает ролик
+              if (asVideo && p >= 1) status.textContent = `Обрабатываю видео ${label}… Это может занять пару минут`;
             },
           });
           state.media.unshift(media);
@@ -421,13 +465,15 @@
     return zone;
   }
 
-  function openPicker(onPick) {
+  function openPicker(onPick, kind = 'image') {
+    const noun = kind === 'video' ? 'видео' : 'фото';
     const grid = el('div', { class: 'media-grid' });
     const close = () => modal.remove();
     const drawGrid = () => {
+      const list = state.media.filter((m) => kindOf(m) === kind);
       grid.replaceChildren(
-        ...(state.media.length
-          ? state.media.map((m) =>
+        ...(list.length
+          ? list.map((m) =>
               el('button', {
                 class: 'media-pick', type: 'button', title: m.alt || 'Выбрать',
                 onclick: () => {
@@ -435,17 +481,17 @@
                   setDirty(true);
                   close();
                 },
-              }, [el('img', { src: m.thumb, alt: m.alt || 'Фото', loading: 'lazy' })]))
-          : [el('p', { class: 'hint', text: 'Пока нет загруженных фото — загрузите первое выше.' })]),
+              }, [mediaThumb(m)]))
+          : [el('p', { class: 'hint', text: `Пока нет загруженных ${noun} — загрузите первое выше.` })]),
       );
     };
-    const modal = el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Выбор фото' }, [
+    const modal = el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': `Выбор: ${noun}` }, [
       el('div', { class: 'modal-box stack' }, [
         el('div', { class: 'modal-head' }, [
-          el('h3', { text: 'Выберите фото' }),
+          el('h3', { text: kind === 'video' ? 'Выберите видео' : 'Выберите фото' }),
           el('button', { class: 'btn', type: 'button', text: 'Закрыть', onclick: close }),
         ]),
-        dropzone(() => drawGrid()),
+        dropzone(() => drawGrid(), kind),
         grid,
       ]),
     ]);
@@ -477,20 +523,24 @@
                   toast(err.message, true);
                 }
               });
+              const isVideo = kindOf(m) === 'video';
+              const size = m.bytes >= 1024 * 1024 ? `${(m.bytes / 1024 / 1024).toFixed(1)} МБ` : `${Math.round(m.bytes / 1024)} КБ`;
               return el('div', { class: 'media-card' }, [
-                el('img', { src: m.thumb, alt: m.alt || 'Фото', loading: 'lazy' }),
+                isVideo
+                  ? el('a', { href: m.url, target: '_blank', rel: 'noopener', title: 'Открыть ролик' }, [mediaThumb(m)])
+                  : mediaThumb(m),
                 el('div', { class: 'meta' }, [
-                  el('span', { text: `${m.width}×${m.height} · ${Math.round(m.bytes / 1024)} КБ` }),
+                  el('span', { text: `${isVideo ? 'Видео · ' : ''}${m.width}×${m.height} · ${size}` }),
                   alt,
                   el('button', {
                     class: 'btn btn-small btn-danger', type: 'button', text: 'Удалить',
                     onclick: async () => {
-                      if (!confirm('Удалить фото навсегда?')) return;
+                      if (!confirm(isVideo ? 'Удалить видео навсегда?' : 'Удалить фото навсегда?')) return;
                       try {
                         await api('DELETE', `/media/${m.id}`);
                         state.media = state.media.filter((x) => x.id !== m.id);
                         draw();
-                        toast('Фото удалено');
+                        toast(isVideo ? 'Видео удалено' : 'Фото удалено');
                       } catch (err) {
                         toast(err.message, true);
                       }
@@ -499,14 +549,14 @@
                 ]),
               ]);
             })
-          : [el('p', { class: 'hint', text: 'Фото пока нет.' })]),
+          : [el('p', { class: 'hint', text: 'Файлов пока нет.' })]),
       );
     };
     draw();
     container.append(
       el('div', { class: 'stack' }, [
-        el('p', { class: 'hint', text: 'Сюда загружаются все фото. Чтобы фото появилось на сайте, выберите его в разделе «Главный экран» или «Работы» и нажмите «Сохранить».' }),
-        dropzone(() => draw()),
+        el('p', { class: 'hint', text: 'Сюда загружаются все фото и видео. Чтобы файл появился на сайте, выберите его в нужном разделе (например, «Работы» или «Проекты») и нажмите «Сохранить». Ролики, которые уже лежат в VK Видео, YouTube или Rutube, загружать не нужно — достаточно вставить ссылку в поле «…или ссылка на ролик».' }),
+        dropzone(() => draw(), 'any'),
         grid,
       ]),
     );
@@ -617,8 +667,8 @@
     const auditBox = el('div', { class: 'audit' }, [el('p', { class: 'hint', text: 'Загружаю…' })]);
     const actions = {
       login: 'Вход', logout: 'Выход', login_failed: 'Неудачный вход', login_failed_unknown_user: 'Вход с неизвестным логином',
-      login_locked: 'Попытка входа при блокировке', content_saved: 'Сохранены тексты', media_uploaded: 'Загружено фото',
-      media_deleted: 'Удалено фото', password_changed: 'Сменён пароль', password_change_failed: 'Неудачная смена пароля',
+      login_locked: 'Попытка входа при блокировке', content_saved: 'Сохранены тексты', media_uploaded: 'Загружено фото', video_uploaded: 'Загружено видео',
+      media_deleted: 'Удалён файл медиатеки', password_changed: 'Сменён пароль', password_change_failed: 'Неудачная смена пароля',
       totp_enabled: 'Включена 2FA', totp_disabled: 'Отключена 2FA', totp_disable_failed: 'Неудачное отключение 2FA',
     };
     api('GET', '/audit')

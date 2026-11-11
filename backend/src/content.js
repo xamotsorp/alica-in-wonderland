@@ -2,7 +2,7 @@
 
 const express = require('express');
 const db = require('./db');
-const { schema, validateContent, ValidationError, collectImageIds } = require('./schema');
+const { schema, validateContent, ValidationError, collectMediaRefs } = require('./schema');
 const defaultContent = require('./defaultContent');
 const { requireAuth, audit } = require('./auth');
 
@@ -88,10 +88,17 @@ router.put('/content', requireAuth, async (req, res, next) => {
       if (err instanceof ValidationError) return res.status(400).json({ error: err.message });
       throw err;
     }
-    const ids = [...collectImageIds(schema, data)];
-    if (ids.length) {
-      const { rows } = await db.query('SELECT id FROM media WHERE id = ANY($1::uuid[])', [ids]);
-      if (rows.length !== ids.length) return res.status(400).json({ error: 'Одно из изображений удалено. Выберите его заново' });
+    const refs = collectMediaRefs(schema, data);
+    if (refs.length) {
+      const ids = [...new Set(refs.map(([id]) => id))];
+      const { rows } = await db.query('SELECT id, kind FROM media WHERE id = ANY($1::uuid[])', [ids]);
+      const kinds = new Map(rows.map((r) => [r.id, r.kind]));
+      for (const [id, kind] of refs) {
+        if (!kinds.has(id)) return res.status(400).json({ error: 'Один из файлов удалён из медиатеки. Выберите его заново' });
+        if (kinds.get(id) !== kind) {
+          return res.status(400).json({ error: kind === 'video' ? 'В поле для видео выбрано фото' : 'В поле для фото выбрано видео' });
+        }
+      }
     }
     const { rows } = await db.query(
       'UPDATE site_content SET data = $1, updated_at = now() WHERE id = 1 RETURNING updated_at',

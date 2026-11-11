@@ -74,6 +74,18 @@ location ~ "^/media/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
     access_log off;
     try_files $uri =404;
 }
+# Загруженные видео: только <uuid>.mp4; перемотка (Range) работает штатно
+location ~ "^/media/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.mp4$" {
+    root /srv;
+    limit_req zone=general burst=80 nodelay;
+    types { }
+    default_type video/mp4;
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "public, max-age=2592000, immutable" always;
+    access_log off;
+    sendfile_max_chunk 512k;
+    try_files $uri =404;
+}
 location /media/ {
     return 404;
 }
@@ -88,6 +100,16 @@ location = /api/admin/media {
     client_max_body_size 16m;
     client_body_timeout 60s;
     include /etc/nginx/snippets/proxy.conf;
+}
+# Загрузка видео: большой файл nginx сначала целиком принимает к себе (медленный клиент
+# не держит соединение с приложением), а обработка ffmpeg может занять несколько минут
+location = /api/admin/media/video {
+    limit_req zone=upload burst=5 nodelay;
+    client_max_body_size 210m;
+    client_body_timeout 60s;
+    include /etc/nginx/snippets/proxy.conf;
+    proxy_send_timeout 120s;
+    proxy_read_timeout 900s;
 }
 location ^~ /api/admin/ {
     limit_req zone=api burst=30 nodelay;

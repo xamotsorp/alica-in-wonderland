@@ -7,8 +7,8 @@ RUN npm ci --omit=dev --ignore-scripts=false && npm cache clean --force
 FROM node:22-alpine
 ENV NODE_ENV=production
 WORKDIR /app
-# tini корректно передаёт сигналы остановки процессу node
-RUN apk add --no-cache tini \
+# tini корректно передаёт сигналы остановки процессу node; ffmpeg проверяет и пересобирает видео
+RUN apk add --no-cache tini ffmpeg \
  && mkdir -p /data/uploads && chown node:node /data/uploads
 COPY --from=deps --chown=root:root /app/node_modules ./node_modules
 COPY --chown=root:root package.json ./

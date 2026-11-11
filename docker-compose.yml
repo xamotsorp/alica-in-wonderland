@@ -54,6 +54,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       ADMIN_IP_ALLOWLIST: ${ADMIN_IP_ALLOWLIST:-}
       MAX_UPLOAD_MB: "15"
+      MAX_VIDEO_MB: "200"
     volumes:
       - uploads:/data/uploads
     networks:

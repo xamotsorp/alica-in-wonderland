@@ -81,6 +81,7 @@ async function start() {
   await fs.mkdir(config.uploadsDir, { recursive: true });
   await db.waitForDatabase();
   await db.migrate();
+  await media.cleanIncoming();
   if (await content.ensureSeed()) {
     const { data } = await content.getContent();
     await content.setSeedPhotos(await media.importSeedPhotos(

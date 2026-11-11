@@ -166,3 +166,13 @@ select.input { height: 44px; cursor: pointer; }
   .topbar, .content { padding-left: 16px; padding-right: 16px; }
   .audit div { grid-template-columns: 1fr; }
 }
+
+/* Видео в медиатеке и полях: кадр-обложка с длительностью */
+.thumb-video { position: relative; display: block; }
+.thumb-video img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #1d1b19; }
+.thumb-video.image-preview { padding: 0; overflow: hidden; }
+.thumb-video.image-preview img { height: 100%; aspect-ratio: auto; }
+.thumb-badge {
+  position: absolute; left: 8px; bottom: 8px; padding: 3px 7px; border-radius: 6px;
+  font-size: 12px; font-weight: 600; color: #fff; background: rgba(0, 0, 0, 0.6);
+}

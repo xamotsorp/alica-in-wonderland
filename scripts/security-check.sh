@@ -77,6 +77,7 @@ for p in /api/admin/me /api/admin/content /api/admin/schema /api/admin/media /ap
 expect "PUT content" "401" -X PUT -H "Origin: $BASE" -H 'Content-Type: application/json' -d '{"data":{}}' "$BASE/api/admin/content"
 expect "POST media" "401" -X POST -H "Origin: $BASE" -F "file=@/dev/null" "$BASE/api/admin/media"
 expect "DELETE media" "401" -X DELETE -H "Origin: $BASE" "$BASE/api/admin/media/00000000-0000-4000-8000-000000000000"
+expect "загрузка видео без входа" "401" -X POST -H "Origin: $BASE" "$BASE/api/admin/media/video"
 expect "POST password" "401" -X POST -H "Origin: $BASE" -H 'Content-Type: application/json' -d '{}' "$BASE/api/admin/password"
 
 section "6. Форма входа"

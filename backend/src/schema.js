@@ -3,14 +3,29 @@
 // Схема содержимого сайта. По ней сервер проверяет сохранение, а админка строит формы.
 // Любое поле, которого нет в схеме, при сохранении отбрасывается.
 
+const { normalizeVideoLink } = require('./video');
+
 const str = (label, max, extra = {}) => ({ type: 'string', label, max, ...extra });
 const text = (label, max, extra = {}) => ({ type: 'string', label, max, multiline: true, ...extra });
 const list = (label, of, max, extra = {}) => ({ type: 'list', label, of, max, ...extra });
 const obj = (label, fields, extra = {}) => ({ type: 'object', label, fields, ...extra });
 const image = (label) => ({ type: 'image', label });
+// Видеофайл из медиатеки (MP4) — хранится так же, как фото: по id
+const video = (label) => ({ type: 'video', label });
 // Выбор из фиксированного списка и переключатель: сервер принимает только перечисленные значения
 const select = (label, options, def) => ({ type: 'select', label, options, default: def });
 const toggle = (label, def) => ({ type: 'toggle', label, default: def });
+
+// Ролик: загруженный файл или ссылка на VK Видео / YouTube / Rutube
+const videoFields = {
+  video: video('Видеофайл (MP4, MOV или WebM)'),
+  videoUrl: str('…или ссылка на ролик: VK Видео, YouTube, Rutube (можно вставить код <iframe>)', 1000, { format: 'video' }),
+  shape: select('Формат ролика', [
+    { value: 'auto', label: 'Определить автоматически' },
+    { value: 'vertical', label: 'Вертикальный 9:16 — Reels, клипы, Shorts' },
+    { value: 'horizontal', label: 'Горизонтальный 16:9' },
+  ], 'auto'),
+};
 
 const tasks = list('Пункты', text('Пункт', 300), 8, { itemLabel: 'Пункт' });
 
@@ -54,6 +69,10 @@ const schema = obj('Сайт', {
         value: str('Значение', 16),
         label: str('Подпись', 60),
       }), 4, { itemLabel: 'Цифра' }),
+      videos: list('Ролики с мероприятия', obj('Ролик', {
+        ...videoFields,
+        title: str('Подпись под роликом', 80),
+      }), 4, { itemLabel: 'Ролик' }),
     }), 12, { itemLabel: 'Проект' }),
   }),
   results: list('Ключевые результаты', obj('Результат', {
@@ -75,11 +94,12 @@ const schema = obj('Сайт', {
     tasks,
     result: text('Результат', 400),
   }), 10, { itemLabel: 'Место работы' }),
-  works: obj('Работы (галерея)', {
+  works: obj('Работы: ролики и примеры контента', {
     heading: str('Заголовок', 80),
     intro: text('Вступление', 300),
     items: list('Карточки', obj('Работа', {
-      photo: image('Изображение'),
+      photo: image('Фото или обложка ролика'),
+      ...videoFields,
       title: str('Название', 80),
       caption: text('Подпись', 220),
       tag: str('Метка (ниша)', 40),
@@ -177,6 +197,8 @@ const FORMATS = {
   // Только обычные символы адреса: без ? & = и т. п., чтобы в ссылку mailto: нельзя было подмешать cc/bcc/subject
   email: { re: /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,24}$/, hint: 'адрес вида name@mail.ru' },
   phone: { re: /^\+?[0-9][0-9\s()-]{5,24}$/, hint: 'только цифры, пробелы, скобки, дефис и +' },
+  // Ссылка проверяется разбором, а сохраняется в едином виде (см. video.js)
+  video: { normalize: normalizeVideoLink, hint: 'нужна ссылка на ролик VK Видео, YouTube или Rutube' },
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -207,7 +229,10 @@ function validate(node, value, path) {
       if (s.length > node.max) throw new ValidationError(path, `не длиннее ${node.max} символов`);
       if (s && node.format) {
         const f = FORMATS[node.format];
-        if (!f.re.test(s)) throw new ValidationError(path, f.hint);
+        if (f.normalize) {
+          s = f.normalize(s);
+          if (!s) throw new ValidationError(path, f.hint);
+        } else if (!f.re.test(s)) throw new ValidationError(path, f.hint);
         if (node.format === 'telegram') s = s.replace(/^@/, '');
       }
       return s;
@@ -218,9 +243,12 @@ function validate(node, value, path) {
     case 'toggle': {
       return typeof value === 'boolean' ? value : node.default;
     }
-    case 'image': {
+    case 'image':
+    case 'video': {
       if (value === undefined || value === null || value === '') return '';
-      if (typeof value !== 'string' || !UUID_RE.test(value)) throw new ValidationError(path, 'неверное изображение');
+      if (typeof value !== 'string' || !UUID_RE.test(value)) {
+        throw new ValidationError(path, node.type === 'video' ? 'неверное видео' : 'неверное изображение');
+      }
       return value;
     }
     case 'list': {
@@ -247,9 +275,9 @@ function validateContent(data) {
   return validate(schema, data, '');
 }
 
-// Все id изображений, на которые ссылается содержимое
+// Все id файлов медиатеки (фото и видео), на которые ссылается содержимое
 function collectImageIds(node = schema, value, out = new Set()) {
-  if (node.type === 'image' && value) out.add(value);
+  if ((node.type === 'image' || node.type === 'video') && value) out.add(value);
   if (node.type === 'list' && Array.isArray(value)) value.forEach((v) => collectImageIds(node.of, v, out));
   if (node.type === 'object' && value) {
     for (const [key, child] of Object.entries(node.fields)) collectImageIds(child, value[key], out);
@@ -257,4 +285,14 @@ function collectImageIds(node = schema, value, out = new Set()) {
   return out;
 }
 
-module.exports = { schema, validateContent, ValidationError, collectImageIds, UUID_RE };
+// Пары [id, 'image' | 'video'] — чтобы проверить, что в поле для фото не выбрано видео и наоборот
+function collectMediaRefs(node = schema, value, out = []) {
+  if ((node.type === 'image' || node.type === 'video') && value) out.push([value, node.type]);
+  if (node.type === 'list' && Array.isArray(value)) value.forEach((v) => collectMediaRefs(node.of, v, out));
+  if (node.type === 'object' && value) {
+    for (const [key, child] of Object.entries(node.fields)) collectMediaRefs(child, value[key], out);
+  }
+  return out;
+}
+
+module.exports = { schema, validateContent, ValidationError, collectImageIds, collectMediaRefs, UUID_RE };

@@ -41,6 +41,9 @@ const config = Object.freeze({
     .map((s) => s.trim())
     .filter(Boolean),
   maxUploadMb: int('MAX_UPLOAD_MB', 15),
+  // Видео: размер файла и длительность. Длинные ролики лучше выкладывать в VK Видео и вставлять ссылкой
+  maxVideoMb: int('MAX_VIDEO_MB', 200),
+  maxVideoSeconds: int('MAX_VIDEO_SECONDS', 600),
 });
 
 module.exports = config;

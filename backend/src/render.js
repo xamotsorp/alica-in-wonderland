@@ -4,6 +4,7 @@
 // ссылки собираются только из проверенных схемой полей — внедрить HTML или javascript: нельзя.
 
 const config = require('./config');
+const { parseVideoLink } = require('./video');
 
 const ASSET_VERSION = process.env.ASSET_VERSION || String(Date.now());
 
@@ -34,6 +35,57 @@ function img(media, id, { cls = '', sizes = '100vw', alt = '', eager = false } =
   if (!m) return '';
   const altText = alt || m.alt || '';
   return `<img class="${cls}" src="${esc(m.url)}" srcset="${esc(m.thumb)} 800w, ${esc(m.url)} ${m.width}w" sizes="${esc(sizes)}" width="${m.width}" height="${m.height}" alt="${esc(altText)}" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`;
+}
+
+// ---------- Видео ----------
+
+function fmtDuration(sec) {
+  const t = Math.round(Number(sec) || 0);
+  return t > 0 ? `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` : '';
+}
+
+// Ролик: свой файл (тег <video>) или ссылка на VK Видео / YouTube / Rutube.
+// Чужой плеер не грузится, пока посетитель не нажмёт «смотреть»: страница не тормозит,
+// а сторонние сайты не получают данные посетителя без его действия.
+function resolveVideo(item, videos) {
+  const file = item.video && videos.get(item.video);
+  if (file) return { file };
+  const link = has(item.videoUrl) ? parseVideoLink(item.videoUrl) : null;
+  return link ? { link } : null;
+}
+
+function videoShape(item, v) {
+  if (item.shape === 'vertical' || item.shape === 'horizontal') return item.shape;
+  if (v.file) return v.file.height > v.file.width ? 'vertical' : 'horizontal';
+  return v.link.vertical ? 'vertical' : 'horizontal';
+}
+
+function videoBlock(item, v, { media, title = '', cls = '', sizes = '100vw', fallbackCover = '' }) {
+  const shape = videoShape(item, v);
+  const cover = item.photo && media.has(item.photo) ? media.get(item.photo) : null;
+  // Для ссылки без своей обложки можно взять фото мероприятия
+  const linkCover = cover ? item.photo : (fallbackCover && media.has(fallbackCover) ? fallbackCover : '');
+  const label = title || 'Видео';
+  if (v.file) {
+    const m = v.file;
+    const poster = cover ? cover.url : m.thumb;
+    const dur = fmtDuration(m.duration);
+    return `<div class="vid vid-${shape} ${cls}">
+      <video class="vid-player" controls playsinline preload="none" poster="${esc(poster)}" width="${m.width}" height="${m.height}" aria-label="${esc(label)}">
+        <source src="${esc(m.url)}" type="video/mp4">
+      </video>
+      ${dur ? `<span class="vid-badge" aria-hidden="true">${dur}</span>` : ''}
+    </div>`;
+  }
+  const l = v.link;
+  return `<div class="vid vid-${shape} vid-ext ${cls}">
+      <a class="vid-facade${linkCover ? '' : ' vid-facade-plain'}" href="${esc(l.page)}" target="_blank" rel="noopener noreferrer" data-embed="${esc(l.embed)}" data-title="${esc(label)}">
+        ${linkCover ? img(media, linkCover, { cls: 'vid-cover', sizes, alt: '' }) : ''}
+        <span class="vid-play" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M8 5.5v13l10.5-6.5z"/></svg></span>
+        <span class="vid-provider">${esc(l.name)}</span>
+        <span class="visually-hidden">Смотреть: ${esc(label)}</span>
+      </a>
+    </div>`;
 }
 
 function icon(name) {
@@ -120,7 +172,11 @@ function sectionHead(num, kicker, title, id, light = false) {
   </header>`;
 }
 
-function renderPage(data, media) {
+function renderPage(data, allMedia) {
+  // Видео из медиатеки — отдельно: в поля для фото они не попадают, и наоборот
+  const media = new Map();
+  const videos = new Map();
+  for (const [id, m] of allMedia) (m.kind === 'video' ? videos : media).set(id, m);
   const h = data.hero;
   // Стиль сайта из админки: значения уже проверены схемой (только из списка)
   const t = data.theme;
@@ -137,7 +193,9 @@ function renderPage(data, media) {
     .map((c) => ({ ...c, points: parsePoints(c.points) }))
     .filter((c) => has(c.title) && c.points.length >= 2);
   const experience = nonEmpty(data.experience, 'role', 'place');
-  const works = (data.works.items || []).filter((w) => media.has(w.photo));
+  const works = (data.works.items || [])
+    .map((w) => ({ ...w, v: resolveVideo(w, videos) }))
+    .filter((w) => w.v || media.has(w.photo));
   const skills = nonEmpty(data.skills, 'items');
   const hobbies = nonEmpty(data.hobbies.items, 'title');
   const other = nonEmpty(data.otherExperience, 'role', 'place');
@@ -294,6 +352,7 @@ ${projects.length ? `<section class="section projects" id="projects" aria-labell
         const photos = [p.photo1, p.photo2].filter((id) => id && media.has(id));
         const done = (p.done || []).filter(has);
         const metrics = nonEmpty(p.metrics, 'value');
+        const clips = (p.videos || []).map((c) => ({ ...c, v: resolveVideo(c, videos) })).filter((c) => c.v);
         return `<li class="case${photos.length ? '' : ' case-no-photo'}">
         ${photos.length ? `<div class="case-media${photos.length > 1 ? ' case-media-two' : ''}">
           ${photos.map((id, k) => `<a class="case-photo case-photo-${k + 1} img-reveal" href="${esc(media.get(id).url)}" data-lightbox data-caption="${esc(p.title)}">
@@ -308,6 +367,15 @@ ${projects.length ? `<section class="section projects" id="projects" aria-labell
           ${done.length ? `<div class="case-block"><span class="case-label">Что сделала</span><ul class="case-done">${done.map((d) => `<li>${multiline(d)}</li>`).join('')}</ul></div>` : ''}
           ${metrics.length ? `<ul class="case-metrics" aria-label="Результаты">${metrics.map((m) => `<li><strong data-count>${esc(m.value)}</strong><span>${esc(m.label)}</span></li>`).join('')}</ul>` : ''}
         </article>
+        ${clips.length ? `<div class="case-videos reveal">
+          <span class="case-label">Ролики с площадки</span>
+          <ul class="case-videos-list">
+            ${clips.map((c, k) => `<li class="case-video">
+              ${videoBlock(c, c.v, { media, title: c.title || p.title, sizes: '(max-width: 640px) 70vw, 280px', fallbackCover: photos[k % Math.max(photos.length, 1)] || '' })}
+              ${has(c.title) ? `<p class="case-video-title">${esc(c.title)}</p>` : ''}
+            </li>`).join('')}
+          </ul>
+        </div>` : ''}
       </li>`;
       }).join('')}
     </ol>
@@ -370,11 +438,12 @@ ${works.length ? `<section class="section works" id="works" aria-labelledby="wor
     ${has(data.works.intro) ? `<p class="section-intro reveal">${multiline(data.works.intro)}</p>` : ''}
     <ul class="works-grid">
       ${works.map((w) => {
+        const sizes = '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw';
         const m = media.get(w.photo);
-        return `<li class="work reveal">
-        <a class="work-link" href="${esc(m.url)}" data-lightbox data-caption="${esc([w.title, w.caption].filter(has).join(' — '))}">
-          ${img(media, w.photo, { cls: 'work-img', sizes: '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw', alt: w.title || m.alt })}
-        </a>
+        return `<li class="work reveal${w.v ? ' work-video' : ''}">
+        ${w.v ? videoBlock(w, w.v, { media, title: w.title, cls: 'work-vid', sizes }) : `<a class="work-link" href="${esc(m.url)}" data-lightbox data-caption="${esc([w.title, w.caption].filter(has).join(' — '))}">
+          ${img(media, w.photo, { cls: 'work-img', sizes, alt: w.title || m.alt })}
+        </a>`}
         <div class="work-text">
           ${has(w.tag) ? `<span class="work-tag">${esc(w.tag)}</span>` : ''}
           ${has(w.title) ? `<h3>${esc(w.title)}</h3>` : ''}
@@ -489,4 +558,4 @@ ${other.length || education.length ? `<section class="section more" id="more" ar
 </html>`;
 }
 
-module.exports = { renderPage, esc, parsePoints };
+module.exports = { renderPage, esc, parsePoints, fmtDuration };

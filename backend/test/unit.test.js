@@ -184,3 +184,82 @@ test('XSS-фаззинг: вредоносный HTML во всех тексто
     assert.ok(!ld.includes('<'), 'в JSON-LD не должно быть «<»');
   }
 });
+
+// ---------- Видео ----------
+
+test('видео: ссылки VK Видео, YouTube и Rutube разбираются, чужие — нет', () => {
+  const { parseVideoLink } = require('../src/video');
+  const yt = parseVideoLink('https://youtube.com/shorts/dQw4w9WgXcQ?si=abc');
+  assert.equal(yt.provider, 'youtube');
+  assert.equal(yt.vertical, true);
+  assert.equal(yt.embed, 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&playsinline=1&autoplay=1');
+  assert.equal(parseVideoLink('youtu.be/dQw4w9WgXcQ').url, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  assert.equal(parseVideoLink('https://m.youtube.com/watch?v=dQw4w9WgXcQ&t=10').vertical, false);
+
+  const clip = parseVideoLink('https://vk.com/clip-12345_67890');
+  assert.equal(clip.provider, 'vk');
+  assert.equal(clip.vertical, true);
+  assert.equal(clip.url, 'https://vkvideo.ru/clip-12345_67890');
+  assert.equal(parseVideoLink('https://vk.com/feed?z=video-1_2%2Fpl_cat').page, 'https://vkvideo.ru/video-1_2');
+  const code = parseVideoLink('<iframe src="https://vkvideo.ru/video_ext.php?oid=-1&amp;id=2&amp;hash=abc123" width="853"></iframe>');
+  assert.equal(code.embed, 'https://vkvideo.ru/video_ext.php?oid=-1&id=2&hash=abc123&hd=2&autoplay=1');
+  // Ссылка с хэшем сохраняется так, что хэш не теряется при повторном разборе
+  assert.equal(parseVideoLink(code.url).embed, code.embed);
+
+  const rt = parseVideoLink('https://rutube.ru/video/0123456789abcdef0123456789abcdef/');
+  assert.equal(rt.embed, 'https://rutube.ru/play/embed/0123456789abcdef0123456789abcdef?autoplay=1');
+  assert.equal(parseVideoLink('https://rutube.ru/shorts/0123456789abcdef0123456789abcdef/').vertical, true);
+
+  for (const bad of [
+    'https://evil.ru/video-1_2', 'javascript:alert(1)', 'https://youtube.com.evil.ru/watch?v=dQw4w9WgXcQ',
+    'https://www.youtube.com/watch?v=short', 'https://user:pw@vk.com/video-1_2', 'https://vk.com:8443/video-1_2',
+    '<iframe src="https://evil.ru/embed"></iframe>', 'https://rutube.ru/video/../../etc/', '',
+  ]) assert.equal(parseVideoLink(bad), null, bad);
+});
+
+test('видео: ссылка приводится к единому виду при сохранении, мусор — ошибка', () => {
+  const data = validateContent({
+    ...defaults,
+    works: { ...defaults.works, items: [{ title: 'Reels', videoUrl: 'youtu.be/dQw4w9WgXcQ', shape: 'oops' }] },
+  });
+  assert.equal(data.works.items[0].videoUrl, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  assert.equal(data.works.items[0].shape, 'auto');
+  assert.deepEqual(data.projects.items[0].videos, []);
+  assert.throws(() => validateContent({ works: { items: [{ videoUrl: 'https://evil.ru/x' }] } }), ValidationError);
+  assert.throws(() => validateContent({ works: { items: [{ video: '../../etc/passwd' }] } }), ValidationError);
+});
+
+test('рендер: свой ролик и ролик по ссылке в «Работах» и проектах', () => {
+  const vid = '11111111-1111-4111-8111-111111111111';
+  const pic = '22222222-2222-4222-8222-222222222222';
+  const media = new Map([
+    [vid, { id: vid, kind: 'video', url: `/media/${vid}.mp4`, thumb: `/media/${vid}-thumb.webp`, width: 1080, height: 1920, duration: 34.2, alt: '' }],
+    [pic, { id: pic, kind: 'image', url: `/media/${pic}.webp`, thumb: `/media/${pic}-thumb.webp`, width: 1200, height: 800, alt: '' }],
+  ]);
+  const projects = structuredClone(defaults.projects);
+  projects.items[0].photo1 = pic;
+  projects.items[0].videos = [{ videoUrl: 'https://vk.com/clip-1_2', title: 'Репортаж' }];
+  const data = validateContent({
+    ...defaults,
+    projects,
+    works: { ...defaults.works, items: [
+      { title: 'Свой Reels', video: vid },
+      { title: 'Shorts', videoUrl: 'https://youtube.com/shorts/dQw4w9WgXcQ', shape: 'horizontal' },
+      // Видео в поле для фото не выводится как картинка
+      { title: 'Не фото', photo: vid },
+    ] },
+  });
+  const html = renderPage(data, media);
+  assert.ok(html.includes('href="#works"'));
+  assert.ok(html.includes(`<source src="/media/${vid}.mp4" type="video/mp4">`));
+  assert.ok(html.includes('class="vid vid-vertical work-vid"'));
+  assert.ok(html.includes('0:34'));
+  assert.ok(html.includes('class="vid vid-horizontal vid-ext work-vid"'));
+  assert.ok(html.includes('data-embed="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&amp;playsinline=1&amp;autoplay=1"'));
+  assert.ok(!html.includes('Не фото'));
+  // Ролик проекта: плеер VK, обложка — фото мероприятия
+  assert.ok(html.includes('class="case-videos reveal"'));
+  assert.ok(html.includes('data-embed="https://vkvideo.ru/video_ext.php?oid=-1&amp;id=2&amp;hd=2&amp;autoplay=1"'));
+  assert.ok(html.includes('Репортаж'));
+  assert.ok(!html.includes('<iframe'), 'чужой плеер не встраивается до нажатия');
+});
